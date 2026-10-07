@@ -1,0 +1,8 @@
+VocalTract.svg — Tavin, 13 November 2011.
+Original: https://commons.wikimedia.org/wiki/File:VocalTract.svg
+Source file: https://upload.wikimedia.org/wikipedia/commons/9/9d/VocalTract.svg
+License: Creative Commons Attribution 3.0 Unported
+https://creativecommons.org/licenses/by/3.0/
+The original SVG is distributed unchanged. The application places Korean labels,
+location highlights and a cropped view over it. The diagram is a schematic of
+organ locations, not a phoneme-specific articulatory posture.
