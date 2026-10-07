@@ -1,3 +1,4 @@
+import { organIllustration } from './OrganIllustrations';
 import { gameConfig as config } from '../config/gameConfig';
 import { PalaceWorld, PICKUPS } from '../world/PalaceWorld';
 import { FestivalAudio } from '../core/FestivalAudio';
@@ -93,7 +94,7 @@ export class FestivalGame {
     if(p==='STAGE2'){
       heading='소리가 만들어지는 모양';desc='글자를 고른 뒤, 닮은 발음 기관을 찾아 연결하세요.';
       complete=organs.every(o=>this.run.solved.includes('organ-'+o.char));
-      game=`<div class="letter-rack">${glyphs.map(c=>`<button class="glyph ${this.selected===c?'selected':''}" data-letter="${c}" ${this.run.solved.includes('organ-'+c)?'disabled':''}>${c}</button>`).join('')}</div><div class="organ-grid">${[organs[2],organs[4],organs[0],organs[3],organs[1]].map(o=>`<button class="organ ${this.run.solved.includes('organ-'+o.char)?'solved':''}" data-organ="${o.char}" ${this.run.solved.includes('organ-'+o.char)?'disabled':''}><svg viewBox="0 0 120 110" aria-hidden="true"><path d="${o.path}"/></svg><span>${o.name}</span><b>${this.run.solved.includes('organ-'+o.char)?o.char+' ✓':'연결하기'}</b></button>`).join('')}</div><p class="subtle">발음 기관을 단순화한 상징 그림입니다.</p>`;
+      game=`<div class="letter-rack">${glyphs.map(c=>`<button class="glyph ${this.selected===c?'selected':''}" data-letter="${c}" ${this.run.solved.includes('organ-'+c)?'disabled':''}>${c}</button>`).join('')}</div><div class="organ-grid">${[organs[2],organs[4],organs[0],organs[3],organs[1]].map(o=>`<button class="organ ${this.run.solved.includes('organ-'+o.char)?'solved':''}" data-organ="${o.char}" ${this.run.solved.includes('organ-'+o.char)?'disabled':''}>${organIllustration(o.char)}<span>${o.name}</span><b>${this.run.solved.includes('organ-'+o.char)?o.char+' ✓':'연결하기'}</b></button>`).join('')}</div><p class="subtle">입·이·목구멍은 정면, 혀뿌리·혀끝은 옆면입니다. 금빛 표시로 해당 부분을 강조했습니다. 훈민정음의 제자 원리를 설명하기 위한 학습용 그림입니다.</p>`;
     }else if(p==='STAGE3'){
       heading='하늘과 땅, 그리고 사람';desc='기본 모음 세 글자를 천·지·인과 연결하세요.';
       complete=['ㆍ','ㅡ','ㅣ'].every(c=>this.run.solved.includes('vowel-'+c));
