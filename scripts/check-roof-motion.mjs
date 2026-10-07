@@ -1,0 +1,5 @@
+import {chromium} from '@playwright/test';
+const browser=await chromium.launch({channel:'chrome'});const page=await browser.newPage({viewport:{width:1100,height:750}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});await page.goto('http://127.0.0.1:5188');
+await page.evaluate(async()=>{document.querySelector('#app').style.display='none';const c=document.createElement('canvas');c.style.cssText='width:1100px;height:750px;display:block';document.body.append(c);const {PalaceWorld}=await import('/src/world/PalaceWorld.ts');window.roofWorld=new PalaceWorld(c);});
+for(const [name,distance] of [['near',3],['far',31]]){await page.evaluate(async d=>{const w=window.roofWorld;for(let i=0;i<90;i++){w.camera.position.set(15+i/90*3,15,d);w.camera.lookAt(0,8,-16);w.render();await new Promise(requestAnimationFrame);}},distance);await page.screenshot({path:`artifacts/qa/roof-motion-${name}.png`});}
+console.log(JSON.stringify({frames:180,errors,metrics:await page.evaluate(()=>window.roofWorld.diagnostics())}));if(errors.length)process.exitCode=1;await browser.close();

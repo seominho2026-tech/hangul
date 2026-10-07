@@ -102,12 +102,7 @@ export class PalaceWorld {
       for (const [s, t] of [[u, v], [u, v1], [u1, v], [u1, v], [u, v1], [u1, v1]]) positions.push(s * w / 2, shape(s, t) - y, t * d / 2);
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); g.computeVertexNormals(); this.staticMesh(g, m, x, y, z);
-    for (let i = 0; i <= 36; i++) {
-      const u = i / 36 * 2 - 1;
-      // Keep raised tile seams clear of the tessellated roof, including the ridge.
-      const pts = Array.from({ length: 73 }, (_, k) => { const v = k / 72 * 2 - 1; return new THREE.Vector3(x + u * w / 2, shape(u, v) + 0.16, z + v * d / 2); });
-      this.staticMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.035, 4, false), trim, 0, 0, 0);
-    }
+    // Tile seams are filtered in the roof shader instead of subpixel tube meshes.
     for (const v of [-1, 1]) {
       const pts = Array.from({ length: 17 }, (_, i) => { const u = i / 16 * 2 - 1; return new THREE.Vector3(x + u * w / 2, shape(u, v), z + v * d / 2); });
       this.staticMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.13, 6, false), trim, 0, 0, 0);
@@ -117,6 +112,23 @@ export class PalaceWorld {
   private buildWorld() {
     const stone = this.material('#a2947d'), paleStone = this.material('#c7b99c'), red = this.material('#853b30'), green = this.material('#34665b');
     const teal = this.material('#6c9b83'), roof = this.material('#293f48'), tile = this.material('#556771');
+    // Screen-space filtering fades tile detail before it becomes smaller than a pixel.
+    // Roofs still cast shadows, but do not receive self-shadow acne on shallow slopes.
+    roof.userData.receiveShadow = false;
+    roof.onBeforeCompile = shader => {
+      shader.vertexShader = 'varying float vRoofX;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoofX = (modelMatrix * vec4(position, 1.0)).x;');
+      shader.fragmentShader = 'varying float vRoofX;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        float tileCoord = vRoofX / 0.65;
+        float pixelWidth = max(fwidth(tileCoord), 0.0001);
+        float distanceToSeam = abs(fract(tileCoord + 0.5) - 0.5);
+        float seam = 1.0 - smoothstep(0.045, 0.045 + pixelWidth, distanceToSeam);
+        float visibility = 1.0 - smoothstep(0.18, 0.5, pixelWidth);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.3, seam * visibility);
+      `);
+    };
+    roof.customProgramCacheKey = () => 'filtered-roof-tiles-v1';
     // Subpixel decorative seams must not cast/receive unstable shadow-map stripes.
     tile.userData.castShadow = false; tile.userData.receiveShadow = false;
     const gold = this.material('#cbb477'), paper = this.material('#ded1ae'), wood = this.material('#513d30');
