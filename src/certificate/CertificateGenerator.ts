@@ -14,10 +14,10 @@ export async function createCertificate(nickname: string, score: number, title: 
     while (ctx.measureText(value).width > maxWidth && actual > 14) { actual -= 1; ctx.font = `${weight} ${actual}px "Noto Sans KR", "Malgun Gothic", sans-serif`; }
     ctx.fillText(value, 540, y);
   };
-  text('HANGEUL · SCHOOL FESTIVAL', 115, 23, '#d5b778', '600');
+  text('한글날 · 우리말 배움 잔치', 115, 23, '#d5b778', '600');
   text('훈민정음 : 사라진 글자를 찾아라', 182, 36, '#fff9e8', '700');
   text('한글 지킴이 인증서', 389, 64, '#173b3c', '800');
-  text('CERTIFICATE OF ACHIEVEMENT', 435, 19, '#967333', '600');
+  text('한글 배움의 결실', 435, 19, '#967333', '600');
   ctx.strokeStyle = '#cbb580'; ctx.beginPath(); ctx.moveTo(340, 484); ctx.lineTo(740, 484); ctx.stroke();
   text(nickname.slice(0, 20) || '한글 탐험가', 590, 61, '#173b3c', '800');
   text('위 참가자는 사라진 글자를 찾는 여정에서', 678, 29);
