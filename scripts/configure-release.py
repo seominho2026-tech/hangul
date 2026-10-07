@@ -1,0 +1,6 @@
+from pathlib import Path
+import json
+p=Path('package.json');j=json.loads(p.read_text(encoding='utf-8-sig'));j['name']='hunminjeongeum-festival';j['version']='1.0.0';j['scripts']['build:test']='node scripts/build-test.mjs';j['scripts']['verify:visual']='node scripts/inspect-threejs-canvas.mjs --manifest artifacts/evidence.json --url http://127.0.0.1:4188 --seed 42';p.write_text(json.dumps(j,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+p=Path('package-lock.json');j=json.loads(p.read_text(encoding='utf-8-sig'));j['name']='hunminjeongeum-festival';j['version']='1.0.0';j['packages']['']['name']='hunminjeongeum-festival';j['packages']['']['version']='1.0.0';p.write_text(json.dumps(j,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+p=Path('scripts/inspect-threejs-canvas.mjs');s=p.read_text(encoding='utf-8');s=s.replace("chromium.launch({ channel: 'chromium' })","chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' })");p.write_text(s,encoding='utf-8')
+Path('artifacts/evidence.json').write_text(json.dumps({'version':1,'runId':'release-1','captures':[{'mode':mode,'state':state,'report':f'artifacts/release-1/{mode}-{state}.json'} for mode in ['desktop','mobile'] for state in ['active-play','puzzle','result']]},indent=2),encoding='utf-8')

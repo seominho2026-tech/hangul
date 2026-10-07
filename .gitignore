@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-test/
+test-results/
+playwright-report/
+artifacts/**/*.png
+artifacts/**/*.webm
+artifacts/**/*.json
+*.log
+.env*
+.vercel/
+.auth/
+*.pem
+.DS_Store
