@@ -89,7 +89,7 @@ export class PalaceWorld {
   }
   private flush() {
     this.batches.forEach((list, material) => {
-      const merged = mergeGeometries(list); if (merged) { const mesh = new THREE.Mesh(merged, material); mesh.castShadow = true; mesh.receiveShadow = true; this.scene.add(mesh); }
+      const merged = mergeGeometries(list); if (merged) { const mesh = new THREE.Mesh(merged, material); mesh.castShadow = material.userData.castShadow !== false; mesh.receiveShadow = material.userData.receiveShadow !== false; this.scene.add(mesh); }
       list.forEach(g => g.dispose());
     }); this.batches.clear();
   }
@@ -104,8 +104,9 @@ export class PalaceWorld {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); g.computeVertexNormals(); this.staticMesh(g, m, x, y, z);
     for (let i = 0; i <= 36; i++) {
       const u = i / 36 * 2 - 1;
-      const pts = Array.from({ length: 13 }, (_, k) => { const v = k / 12 * 2 - 1; return new THREE.Vector3(x + u * w / 2, shape(u, v) + 0.045, z + v * d / 2); });
-      this.staticMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.045, 4, false), trim, 0, 0, 0);
+      // Keep raised tile seams clear of the tessellated roof, including the ridge.
+      const pts = Array.from({ length: 73 }, (_, k) => { const v = k / 72 * 2 - 1; return new THREE.Vector3(x + u * w / 2, shape(u, v) + 0.16, z + v * d / 2); });
+      this.staticMesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.035, 4, false), trim, 0, 0, 0);
     }
     for (const v of [-1, 1]) {
       const pts = Array.from({ length: 17 }, (_, i) => { const u = i / 16 * 2 - 1; return new THREE.Vector3(x + u * w / 2, shape(u, v), z + v * d / 2); });
@@ -116,6 +117,8 @@ export class PalaceWorld {
   private buildWorld() {
     const stone = this.material('#a2947d'), paleStone = this.material('#c7b99c'), red = this.material('#853b30'), green = this.material('#34665b');
     const teal = this.material('#6c9b83'), roof = this.material('#293f48'), tile = this.material('#556771');
+    // Subpixel decorative seams must not cast/receive unstable shadow-map stripes.
+    tile.userData.castShadow = false; tile.userData.receiveShadow = false;
     const gold = this.material('#cbb477'), paper = this.material('#ded1ae'), wood = this.material('#513d30');
     const grass = this.material('#727b4e'), ochre = this.material('#d4b779');
     this.box(grass, 0, -0.35, 0, 140, 0.5, 140);
@@ -288,4 +291,5 @@ export class PalaceWorld {
   diagnostics() { return { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures, materials: this.materials.length, dpr: this.renderer.getPixelRatio(), qualityReduced: this.qualityReduced, shadowMapSize: 1024, postPasses: 0 }; }
   dispose() { this.scene.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.Points) o.geometry.dispose(); }); this.materials.forEach(m => m.dispose()); this.textures.forEach(t => t.dispose()); this.renderer.dispose(); }
 }
+
 
