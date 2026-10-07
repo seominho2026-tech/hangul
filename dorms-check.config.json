@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "훈민정음: 사라진 글자를 찾아라",
+    "url": "https://seominho2026-tech.github.io/hangul/",
+    "stack": "Vite"
+  },
+  "tracks": [
+    "security"
+  ],
+  "edzipCase": null,
+  "teacher": {
+    "dormsHandle": ""
+  },
+  "ownershipConfirmed": true
+}
