@@ -20,7 +20,7 @@ export class FestivalAudio {
     await this.ctx.resume(); this.sync();
     this.timer ??= setInterval(()=>this.pump(),25);
   }
-  sync() { if(this.master && this.ctx) this.master.gain.setTargetAtTime(this.enabled ? this.volume : 0, this.ctx.currentTime, 0.02); }
+  sync() { if(this.master && this.ctx) this.master.gain.setTargetAtTime(this.enabled ? this.volume * 1.5 : 0, this.ctx.currentTime, 0.02); }
   async pause(paused: boolean) { this.paused=paused; if(this.ctx) { if(paused) await this.ctx.suspend(); else await this.ctx.resume(); } }
   private tone(freq: number, delay: number, duration: number, gain: number, type: OscillatorType = 'sine') {
     if(!this.ctx || !this.master || this.ctx.state !== 'running') return;
