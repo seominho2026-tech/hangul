@@ -6,6 +6,8 @@ export class FestivalAudio {
   private music?: GainNode;
   private noise?: AudioBuffer;
   private paused = false;
+  private timer?: ReturnType<typeof setInterval>;
+  private scene = {active:false, phase:'START', remaining:60};
   enabled = true;
   volume = 0.35;
   async unlock() {
@@ -14,6 +16,7 @@ export class FestivalAudio {
     if (!this.music) { this.music = this.ctx.createGain(); this.music.gain.value = 0.52; this.music.connect(this.master); }
     if(this.paused) return;
     await this.ctx.resume(); this.sync();
+    this.timer ??= setInterval(()=>this.pump(),25);
   }
   sync() { if(this.master && this.ctx) this.master.gain.setTargetAtTime(this.enabled ? this.volume : 0, this.ctx.currentTime, 0.02); }
   async pause(paused: boolean) { this.paused=paused; if(this.ctx) { if(paused) await this.ctx.suspend(); else await this.ctx.resume(); } }
@@ -92,9 +95,13 @@ export class FestivalAudio {
     if(urgent&&step%4===0)this.note(86,at,0.045,0.023,'sine');
   }
   update(_t:number, active:boolean, phase='STAGE1', remaining=60) {
+    this.scene={active,phase,remaining};this.pump();
+  }
+  private pump() {
+    const {active,phase,remaining}=this.scene;
     if(!this.ctx || !this.music || this.ctx.state!=='running')return;
     const now=this.ctx.currentTime;
-    if(!active || !this.enabled || ['RESULT','CERTIFICATE','RANKING','RESTORE'].includes(phase)) {this.next=now;return;}
+    if(!active || this.paused || !this.enabled || ['RESULT','CERTIFICATE','RANKING','RESTORE'].includes(phase)) {this.next=now;return;}
     // Schedule against the audio clock, independent of frame rate. Do not catch
     // up missed beats when returning from a muted or suspended tab.
     if(this.next<now)this.next=now+0.015;

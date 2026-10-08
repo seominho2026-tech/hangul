@@ -5,6 +5,7 @@ test-results/
 playwright-report/
 artifacts/**/*.png
 artifacts/**/*.webm
+artifacts/**/*.wav
 artifacts/**/*.json
 *.log
 .env*

@@ -37,7 +37,7 @@ const controls=await page.evaluate(async()=>{
  await a.pause(true);await a.unlock();
  if(a.ctx.state!=='suspended')throw Error('Pointer unlock defeats pause');
  await a.pause(false);if(a.ctx.state!=='running')throw Error('Resume failed');
- await a.ctx.close();return {mute:true,pause:true,resume:true,urgency:true,noCatchUpBurst:true};
+ clearInterval(a.timer);await a.ctx.close();return {mute:true,pause:true,resume:true,urgency:true,noCatchUpBurst:true};
 });
 console.log(JSON.stringify({renders:rendered.reports,controls,preview:'artifacts/qa/music-preview.wav'}));
 await browser.close();
