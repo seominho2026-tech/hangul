@@ -270,7 +270,7 @@ export class FestivalGame {
       if(['RESULT','CERTIFICATE','RANKING'].includes(this.run.phase)&&this.settings.festivalMode&&!this.modal){const n=this.ui.querySelector('#reset-count');if(n)n.textContent=String(Math.max(0,Math.ceil(config.autoResetSeconds-this.idle)));if(this.idle>=config.autoResetSeconds)this.home();}
       if(this.run.phase==='START'&&this.idle>=config.attractSeconds)this.change('ATTRACT');
       if(!this.paused)this.world.update(dt,this.reduced?0:this.time);
-      this.audio.update(this.time,!this.paused&&!document.hidden&&this.run.phase!=='BONUS_QUIZ');
+      this.audio.update(this.time,!this.paused&&!document.hidden,this.run.phase,Math.max(0,(this.run.quizDeadline-this.now())/1000));
       this.saveClock+=dt;if(this.saveClock>=2){this.saveClock=0;this.persist();}
     }
     this.world.render();

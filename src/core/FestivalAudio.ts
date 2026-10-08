@@ -3,15 +3,20 @@ export class FestivalAudio {
   private master?: GainNode;
   private beat = 0;
   private next = 0;
+  private music?: GainNode;
+  private noise?: AudioBuffer;
+  private paused = false;
   enabled = true;
   volume = 0.35;
   async unlock() {
     this.ctx ??= new AudioContext();
     if (!this.master) { this.master = this.ctx.createGain(); this.master.connect(this.ctx.destination); }
+    if (!this.music) { this.music = this.ctx.createGain(); this.music.gain.value = 0.52; this.music.connect(this.master); }
+    if(this.paused) return;
     await this.ctx.resume(); this.sync();
   }
   sync() { if(this.master && this.ctx) this.master.gain.setTargetAtTime(this.enabled ? this.volume : 0, this.ctx.currentTime, 0.02); }
-  pause(paused: boolean) { if(this.ctx) { if(paused) void this.ctx.suspend(); else void this.ctx.resume(); } }
+  async pause(paused: boolean) { this.paused=paused; if(this.ctx) { if(paused) await this.ctx.suspend(); else await this.ctx.resume(); } }
   private tone(freq: number, delay: number, duration: number, gain: number, type: OscillatorType = 'sine') {
     if(!this.ctx || !this.master || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime + delay, osc = this.ctx.createOscillator(), envelope = this.ctx.createGain();
@@ -22,11 +27,79 @@ export class FestivalAudio {
   play(event: 'click'|'pickup'|'correct'|'wrong'|'combo'|'door'|'page'|'portal'|'tick'|'result'|'certificate') {
     const notes: Record<typeof event, number[]> = {click:[660],pickup:[523,784,1047],correct:[659,880],wrong:[220,196],combo:[523,659,784,1047],door:[196,294,392],page:[330,440],portal:[196,294,440,659,988],tick:[880],result:[523,659,784,1047,1319],certificate:[784,1047,1568]};
     notes[event].forEach((n,i)=>this.tone(n,i*.095,event==='wrong'?.15:.42,event==='tick'?.06:.16,event==='wrong'?'triangle':'sine'));
+    if(this.music && this.ctx && ['pickup','correct','wrong','combo','result','portal'].includes(event)) {
+      const t=this.ctx.currentTime;
+      this.music.gain.cancelScheduledValues(t);
+      this.music.gain.setTargetAtTime(0.24,t,0.02);
+      this.music.gain.setTargetAtTime(0.52,t+0.45,0.12);
+    }
   }
-  update(t: number, active: boolean) {
-    if(!active || !this.enabled || t < this.next) return;
-    this.next=t+1.4;
-    const scale=[261.63,329.63,392,440,392,329.63,293.66,392];
-    this.tone(scale[this.beat++%scale.length],0,1.3,.035,'triangle');
+  // Short pentatonic plucks, bass and percussion. No external assets or credentials.
+  private note(midi:number, at:number, duration:number, gain:number, type:OscillatorType='triangle') {
+    if(!this.ctx || !this.music) return;
+    const osc=this.ctx.createOscillator(), env=this.ctx.createGain();
+    osc.type=type; osc.frequency.value=440*2**((midi-69)/12);
+    env.gain.setValueAtTime(0,at);env.gain.linearRampToValueAtTime(gain,at+0.006);
+    env.gain.exponentialRampToValueAtTime(0.0001,at+duration);
+    osc.connect(env).connect(this.music);osc.start(at);osc.stop(at+duration+0.01);
+    osc.onended=()=>{osc.disconnect();env.disconnect();};
+  }
+  private drum(at:number, kind:'kick'|'snare'|'hat', gain:number) {
+    if(!this.ctx || !this.music) return;
+    const env=this.ctx.createGain();env.connect(this.music);
+    const length=kind==='kick'?0.15:kind==='snare'?0.10:0.035;
+    env.gain.setValueAtTime(0,at);env.gain.linearRampToValueAtTime(gain,at+0.003);
+    env.gain.exponentialRampToValueAtTime(0.0001,at+length);
+    if(kind==='kick') {
+      const osc=this.ctx.createOscillator();osc.frequency.setValueAtTime(125,at);
+      osc.frequency.exponentialRampToValueAtTime(48,at+0.11);
+      osc.connect(env);osc.start(at);osc.stop(at+length+0.01);
+      osc.onended=()=>{osc.disconnect();env.disconnect();};
+    } else {
+      if(!this.noise){this.noise=this.ctx.createBuffer(1,this.ctx.sampleRate,this.ctx.sampleRate);
+        const data=this.noise.getChannelData(0);let seed=314159;
+        for(let i=0;i<data.length;i++){seed=(seed*1664525+1013904223)>>>0;data[i]=(seed/4294967296)*2-1;}}
+      const src=this.ctx.createBufferSource(), filter=this.ctx.createBiquadFilter();src.buffer=this.noise;
+      filter.type='highpass';filter.frequency.value=kind==='hat'?6500:1500;
+      src.connect(filter).connect(env);src.start(at);src.stop(at+length+0.01);
+      src.onended=()=>{src.disconnect();filter.disconnect();env.disconnect();};
+    }
+  }
+  private scheduleStep(at:number, index:number, phase:string, urgent:boolean) {
+    const step=index%16, bar=Math.floor(index/16)%8;
+    const menu=['START','ATTRACT','PLAYER_SETUP','INTRO'].includes(phase);
+    const quiz=phase==='BONUS_QUIZ';
+    const intensity=menu?0.55:quiz?1:phase==='STAGE1'?0.85:0.65;
+    const roots=[38,36,43,38,38,36,43,45];
+    // Eight bars: two related phrases, a lift and a turn back to the opening.
+    const melody=[
+      [74,0,77,0,81,0,79,77,0,74,0,72,74,0,0,0],
+      [72,0,74,77,0,79,0,77,0,74,0,72,0,0,74,0],
+      [79,0,81,0,84,0,81,79,0,77,0,74,77,0,0,0],
+      [77,0,74,0,72,0,74,0,0,0,77,79,81,0,0,0],
+      [74,0,77,79,81,0,84,0,81,0,79,77,74,0,0,0],
+      [72,0,74,0,77,79,0,77,0,74,0,72,74,0,77,0],
+      [79,0,81,0,84,0,86,84,81,0,79,0,77,0,74,0],
+      [81,0,79,77,74,0,72,0,74,0,0,0,0,0,72,0],
+    ];
+    const pitch=melody[bar][step];
+    if(pitch){this.note(pitch,at,0.17,0.075*intensity);this.note(pitch+12,at,0.07,0.018*intensity,'sine');}
+    if(step===0||step===8||(!menu&&(step===6||step===14)))this.note(roots[bar]+(step===14?12:0),at,0.16,0.095*intensity,'sine');
+    if(step===0||step===8||quiz&&step===10)this.drum(at,'kick',0.15*intensity);
+    if(!menu&&(step===4||step===12)){this.drum(at,'snare',0.065*intensity);this.note(50,at,0.07,0.035*intensity,'sine');}
+    if(!menu&&step%2===0)this.drum(at,'hat',0.033*intensity);
+    if(quiz&&(step===3||step===11))this.note(roots[bar]+24,at,0.09,0.04,'triangle');
+    if(urgent&&step%4===0)this.note(86,at,0.045,0.023,'sine');
+  }
+  update(_t:number, active:boolean, phase='STAGE1', remaining=60) {
+    if(!this.ctx || !this.music || this.ctx.state!=='running')return;
+    const now=this.ctx.currentTime;
+    if(!active || !this.enabled || ['RESULT','CERTIFICATE','RANKING','RESTORE'].includes(phase)) {this.next=now;return;}
+    // Schedule against the audio clock, independent of frame rate. Do not catch
+    // up missed beats when returning from a muted or suspended tab.
+    if(this.next<now)this.next=now+0.015;
+    const urgent=phase==='BONUS_QUIZ'&&remaining<=10;
+    const bpm=phase==='BONUS_QUIZ'?(urgent?160:148):phase==='STAGE1'?132:124;
+    while(this.next<now+0.065){this.scheduleStep(this.next,this.beat++,phase,urgent);this.next+=60/bpm/4;}
   }
 }
