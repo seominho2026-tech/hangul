@@ -72,5 +72,8 @@ test('content and ranking validation',()=>{
  expect(seoulDay('2026-10-06T15:00:00Z')).toBe('2026-10-07');
  const ranking=new LocalRankingService();for(let i=0;i<12;i++)ranking.save({id:String(i),nickname:'시험',score:i*100,title:'지킴이',date:new Date().toISOString()});expect(ranking.list(true)).toHaveLength(12);expect(ranking.list(true)[0].score).toBe(1100);ranking.save({id:'11',nickname:'시험',score:1200,title:'지킴이',date:new Date().toISOString()});expect(ranking.list().length).toBe(12);
  const run=freshRun();run.phase='BONUS_QUIZ';run.nickname='시험';run.quizOrder=[];data.set(RUN_KEY,JSON.stringify(run));expect(loadRun()).toBeNull();
+ const legacy=freshRun();legacy.phase='STAGE2';legacy.nickname='이전기록';delete legacy.quizMistakes;data.set(RUN_KEY,JSON.stringify(legacy));expect(loadRun()?.nickname).toBe('이전기록');expect(loadRun()?.quizMistakes).toBeUndefined();
+ legacy.quizMistakes=[questions[0].id];data.set(RUN_KEY,JSON.stringify(legacy));expect(loadRun()?.quizMistakes).toEqual([questions[0].id]);
+ legacy.quizMistakes=[-1];data.set(RUN_KEY,JSON.stringify(legacy));expect(loadRun()).toBeNull();
  ranking.clear(true);expect(ranking.list()).toHaveLength(0);
 });

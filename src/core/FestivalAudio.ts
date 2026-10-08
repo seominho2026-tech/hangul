@@ -6,6 +6,8 @@ export class FestivalAudio {
   private music?: GainNode;
   private noise?: AudioBuffer;
   private paused = false;
+  private lastFoley = new Map<string, number>();
+  private footSide = 1;
   private timer?: ReturnType<typeof setInterval>;
   private scene = {active:false, phase:'START', remaining:60};
   enabled = true;
@@ -27,14 +29,59 @@ export class FestivalAudio {
     envelope.gain.setValueAtTime(0,t); envelope.gain.linearRampToValueAtTime(gain,t+0.012); envelope.gain.exponentialRampToValueAtTime(0.001,t+duration);
     osc.connect(envelope).connect(this.master); osc.start(t); osc.stop(t+duration+0.02); osc.onended = () => {osc.disconnect(); envelope.disconnect();};
   }
-  play(event: 'click'|'pickup'|'correct'|'wrong'|'combo'|'door'|'page'|'portal'|'tick'|'result'|'certificate') {
-    const notes: Record<typeof event, number[]> = {click:[660],pickup:[523,784,1047],correct:[659,880],wrong:[220,196],combo:[523,659,784,1047],door:[196,294,392],page:[330,440],portal:[196,294,440,659,988],tick:[880],result:[523,659,784,1047,1319],certificate:[784,1047,1568]};
+  play(event: 'click'|'pickup'|'correct'|'wrong'|'combo'|'door'|'page'|'footstep'|'portal'|'tick'|'result'|'certificate') {
+    if(event==='page'||event==='door'||event==='footstep') { this.foley(event); return; }
+    const notes: Record<typeof event, number[]> = {click:[660],pickup:[523,784,1047],correct:[659,880],wrong:[220,196],combo:[523,659,784,1047],portal:[196,294,440,659,988],tick:[880],result:[523,659,784,1047,1319],certificate:[784,1047,1568]};
     notes[event].forEach((n,i)=>this.tone(n,i*.095,event==='wrong'?.15:.42,event==='tick'?.06:.16,event==='wrong'?'triangle':'sine'));
     if(this.music && this.ctx && ['pickup','correct','wrong','combo','result','portal'].includes(event)) {
       const t=this.ctx.currentTime;
       this.music.gain.cancelScheduledValues(t);
       this.music.gain.setTargetAtTime(0.24,t,0.02);
       this.music.gain.setTargetAtTime(0.52,t+0.45,0.12);
+    }
+  }
+  // Procedural paper, wooden hinge and stone footsteps; these are synthesized,
+  // not recordings. A single cached noise buffer serves all short effects.
+  private noiseBuffer() {
+    if (!this.ctx) return;
+    if (!this.noise) {
+      this.noise = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      const data = this.noise.getChannelData(0); let seed = 314159;
+      for (let i=0;i<data.length;i++) { seed=(seed*1664525+1013904223)>>>0; data[i]=seed/4294967296*2-1; }
+    }
+    return this.noise;
+  }
+  private rustle(at: number, duration: number, gain: number, frequency: number, pan: number) {
+    if (!this.ctx || !this.master) return;
+    const source=this.ctx.createBufferSource(), filter=this.ctx.createBiquadFilter();
+    const env=this.ctx.createGain(), stereo=this.ctx.createStereoPanner();
+    source.buffer=this.noiseBuffer()!; filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=0.65;
+    stereo.pan.value=pan;env.gain.setValueAtTime(0,at);env.gain.linearRampToValueAtTime(gain,at+0.014);
+    env.gain.exponentialRampToValueAtTime(0.0001,at+duration);
+    source.connect(filter).connect(env).connect(stereo).connect(this.master);
+    source.start(at,0.17);source.stop(at+duration+0.01);
+    source.onended=()=>{source.disconnect();filter.disconnect();env.disconnect();stereo.disconnect();};
+  }
+  private foley(event: 'page'|'door'|'footstep') {
+    if (!this.ctx || !this.master || this.ctx.state!=='running' || this.paused || !this.enabled) return;
+    const now=this.ctx.currentTime, cooldown=event==='footstep'?0.28:event==='page'?0.18:0.6;
+    if (now-(this.lastFoley.get(event)??-10)<cooldown) return;
+    this.lastFoley.set(event,now);
+    if (event==='page') {
+      this.rustle(now,0.17,0.19,2400,-0.18);
+      this.rustle(now+0.07,0.19,0.11,3800,0.18);
+    } else if (event==='footstep') {
+      this.footSide*=-1;
+      this.rustle(now,0.095,0.12,620,this.footSide*0.13);
+      this.tone(this.footSide===1?105:118,0,0.075,0.08,'sine');
+    } else {
+      this.rustle(now,0.28,0.13,440,-0.2);
+      const hinge=this.ctx.createOscillator(), env=this.ctx.createGain();hinge.type='triangle';
+      hinge.frequency.setValueAtTime(145,now);hinge.frequency.exponentialRampToValueAtTime(96,now+0.28);
+      env.gain.setValueAtTime(0,now);env.gain.linearRampToValueAtTime(0.055,now+0.04);env.gain.exponentialRampToValueAtTime(0.0001,now+0.31);
+      hinge.connect(env).connect(this.master);hinge.start(now);hinge.stop(now+0.32);
+      hinge.onended=()=>{hinge.disconnect();env.disconnect();};
+      this.rustle(now+0.22,0.10,0.17,260,0.12);
     }
   }
   // Short pentatonic plucks, bass and percussion. No external assets or credentials.
@@ -59,10 +106,7 @@ export class FestivalAudio {
       osc.connect(env);osc.start(at);osc.stop(at+length+0.01);
       osc.onended=()=>{osc.disconnect();env.disconnect();};
     } else {
-      if(!this.noise){this.noise=this.ctx.createBuffer(1,this.ctx.sampleRate,this.ctx.sampleRate);
-        const data=this.noise.getChannelData(0);let seed=314159;
-        for(let i=0;i<data.length;i++){seed=(seed*1664525+1013904223)>>>0;data[i]=(seed/4294967296)*2-1;}}
-      const src=this.ctx.createBufferSource(), filter=this.ctx.createBiquadFilter();src.buffer=this.noise;
+      const src=this.ctx.createBufferSource(), filter=this.ctx.createBiquadFilter();src.buffer=this.noiseBuffer()!;
       filter.type='highpass';filter.frequency.value=kind==='hat'?6500:1500;
       src.connect(filter).connect(env);src.start(at);src.stop(at+length+0.01);
       src.onended=()=>{src.disconnect();filter.disconnect();env.disconnect();};

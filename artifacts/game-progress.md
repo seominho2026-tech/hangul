@@ -22,4 +22,12 @@ Warm sunset, blue-green tiled roofs, vermilion pillars, gold letter seals, indig
 Production build and preview, desktop/mobile real input progression, timing and combo assertions, persistence, certificate, reset, console checks. Active-play, puzzle and result captures; renderer/pixel metrics. Hardware phone performance remains separate from viewport emulation.
 
 ## Current
-Scaffold created; implementation in progress. No repository or deployment identifiers yet; verify real account/project before publication.
+운영 저장소: https://github.com/seominho2026-tech/hangul
+공개 주소: https://seominho2026-tech.github.io/hangul/
+GitHub Pages main /docs 배포. 서버·DB·유료 외부 API 사용 없음.
+
+## 2026-10-08 학습 연출 확장
+- 승인 범위: 글자 생성 연출, 책·궁궐 복원, 가상 안내자와 장별 목표, 공간 효과음, 복습 도감.
+- 제약: 유료 서비스 금지, 무거운 입체 모델 금지. 기존 점수·저장·인증서·출처와 검증된 기관 단면 유지.
+- 구현: 기존 기관 그림 확대와 SVG 선 그리기; 다섯 장 복원; 기존 궁궐 재질 변화; 무료 효과음; 오답 문제 ID만 브라우저 기록에 추가.
+- 검증 완료: 1440·390·320 너비에서 다섯 장, 글자 재생과 중복 점수 방지, 새로고침 재개, 오답 해설·출처, 인증서 PNG 저장. 화면 넘침과 실행 오류 없음. 실제 기기 성능은 별도 확인 필요.

@@ -1,3 +1,5 @@
+import { chapterGuide, restorationBook, discoveryMarkup, journalMarkup } from './LearningJourney';
+import '../learning-journey.css';
 import { organIllustration } from './OrganIllustrations';
 import { gameConfig as config } from '../config/gameConfig';
 import { PalaceWorld, PICKUPS } from '../world/PalaceWorld';
@@ -35,6 +37,8 @@ export class FestivalGame {
   private keys=new Set<string>();
   private stick={x:0,z:0};
   private selected='';
+  private discovery: {kind:'organ'|'vowel'|'stroke'|'syllable';char:string;from?:string}|null=null;
+  private footClock=0;
   private last=performance.now();
   private time=0; private frame=0; private idle=0; private saveClock=0; private readyUntil=0;
   private paused=false; private frozen=false;
@@ -59,14 +63,16 @@ export class FestivalGame {
     this.run.position=this.world.getPlayer();
     try{localStorage.setItem(RUN_KEY,JSON.stringify(this.run));}catch{if(!this.storageWarning){this.storageWarning=true;this.toast('이 브라우저에서는 기록 저장이 제한됩니다.');}}
   }
-  private change(phase:Phase){this.run.phase=phase;this.selected='';this.keys.clear();this.stick={x:0,z:0};this.idle=0;this.world.setMode(phase);this.render();this.persist();}
+  private change(phase:Phase){this.run.phase=phase;this.selected='';this.discovery=null;this.keys.clear();this.stick={x:0,z:0};this.idle=0;this.world.setMode(phase);this.render();this.persist();}
   private start(){this.run=freshRun();this.world.setCollected([]);this.world.setPlayer(0,15);this.change('PLAYER_SETUP');}
   private home(){if(!this.run.nickname&&this.resume){this.run=freshRun();this.change('START');return;}this.run=freshRun();this.resume=null;this.paused=false;this.quizLocked=false;this.world.setCollected([]);this.world.setPlayer(0,15);try{localStorage.removeItem(RUN_KEY);}catch{}this.change('START');}
   private toast(text:string){this.toastEl.textContent=text;this.toastEl.classList.remove('show');requestAnimationFrame(()=>this.toastEl.classList.add('show'));}
   private button(action:string,text:string,cls=''){return `<button class="${cls}" data-action="${action}">${text}</button>`;}
   private shell(content:string,cls=''){return `<div class="screen ${cls}">${content}</div>`;}
   private chrome(){return `<header class="topbar"><a class="brand" href="#" data-action="brand"><span class="brand-seal">훈</span><span>훈민정음 <small>사라진 글자를 찾아라</small></span></a><div class="top-actions">${this.button('sound',this.audio.enabled?'♪ 소리 켜짐':'♪ 소리 꺼짐','quiet sound-button')}${this.button('help','?','icon-button')}${!['START','ATTRACT','PLAYER_SETUP','RESULT','CERTIFICATE','RANKING'].includes(this.run.phase)?this.button('pause','Ⅱ','icon-button'):''}</div></header>`;}
+  private completedChapters(){return [this.run.collected.length===5,organs.every(o=>this.run.solved.includes('organ-'+o.char)),['ㆍ','ㅡ','ㅣ'].every(c=>this.run.solved.includes('vowel-'+c)),strokes.every((_,i)=>this.run.solved.includes('stroke-'+i)),this.run.solved.includes('word-글')].filter(Boolean).length;}
   private render(){
+    this.world.setRestoration(this.completedChapters(),this.reduced);
     const p=this.run.phase;let body='';
     if(p==='START'||p==='ATTRACT'){
       body=this.shell(`<div class="title-copy"><div class="eyebrow"><span class="red-dot"></span> 한글날 · 우리말 배움 잔치</div><div class="title-date">一 四 四 六</div><h1>훈민정음<span>사라진 글자를 찾아라</span></h1><p class="title-sub">사라진 스물여덟 글자의 비밀</p><div class="title-rule"></div><p class="title-desc">${p==='ATTRACT'?'도전자를 찾습니다!<br>사라진 글자를 찾을 다음 주인공은 당신입니다.':'시간의 문 너머, 글자가 사라진 조선.<br>다섯 가지 비밀을 풀고 한글을 되찾아 주세요.'}</p><div class="title-buttons">${this.button('start','시간 여행 시작 <span>→</span>','primary large')}${this.resume?this.button('resume',`${esc(this.resume.nickname)} 님의 탐험 이어하기`,'resume'):''}${this.button('ranking','오늘의 한글 지킴이 ↗','text-button')}</div><div class="journey-meta"><span>본편 8–12분</span><i></i><span>5개의 비밀</span><i></i><span>인증서 발급</span></div></div><div class="world-caption"><span>1446 · 조선</span><b>집현전의 문이 열립니다</b></div><footer class="title-footer"><span>누구나 자신의 생각을 글로 표현할 수 있도록.</span><span>방향키로 이동 · 띄어쓰기 키로 발견 · 손가락 조작 지원</span></footer>`,'title-screen');
@@ -76,15 +82,16 @@ export class FestivalGame {
       body=this.shell(`<section class="panel story"><span class="eyebrow">여는 이야기 · 시간의 문</span><div class="book" aria-label="훈민정음 책"><span>訓<br>民<br>正<br>音</span></div><h1>도서관에서 발견한<br>오래된 한 권의 책</h1><p>책 속의 글자들이 흩어지며 시간의 문이 열립니다.<br><strong>1446년, 훈민정음이 세상에 모습을 드러내던 해.</strong></p><p>사라진 글자를 찾아 훈민정음을 복원해 주세요.</p>${this.button('enter-palace','책을 펼쳐 1446년으로 →','primary large')}</section>`,'center-screen');
     }else if(p==='STAGE1'){
       const count=this.run.collected.length;
-      body=`${this.hud(0)}<div class="explore-objective"><span class="eyebrow">첫 번째 임무</span><h2>${count===5?'집현전의 문이 열렸습니다':'빛나는 글자 조각을 찾아라'}</h2><p>${count===5?'다섯 글자에 숨은 원리를 알아보세요.':'궁궐을 탐험하고 글자 가까이에서 띄어쓰기 키를 누르세요.'}</p><div class="inventory">${glyphs.map(c=>`<span class="${this.run.collected.includes(c)?'found':''}">${c}</span>`).join('')}<b>${count} / 5</b></div>${count===5?this.button('next-stage','집현전으로 들어가기 →','primary'):''}</div><div class="minimap" aria-label="글자 위치 지도"><span>궁궐 지도</span>${PICKUPS.map(a=>`<i class="map-letter ${this.run.collected.includes(a.char)?'taken':''}" style="left:${50+a.x*2}%;top:${50+a.z*1.8}%">${a.char}</i>`).join('')}<b id="map-player">◆</b><em>남문</em></div><div class="explore-bottom"><div class="key-guide"><kbd>↑ ← ↓ →</kbd> 이동 <kbd>띄어쓰기</kbd> 발견<br><small>화면을 드래그하면 시점을 돌릴 수 있어요.</small></div><button id="interact" class="interact" data-action="interact"><kbd>띄어쓰기</kbd><span id="near-label">글자를 찾아 가까이 가세요</span></button></div><div class="touch-controls"><div id="joystick" role="group" aria-label="이동 조이스틱"><span id="stick-knob"></span></div><button data-action="interact" class="touch-interact" aria-label="글자 발견">발견 <span>✦</span></button></div>`;
+      body=`${this.hud(0)}<div class="explore-objective"><span class="eyebrow">첫 번째 임무</span><h2>${count===5?'집현전의 문이 열렸습니다':'빛나는 글자 조각을 찾아라'}</h2><p>${count===5?'다섯 글자에 숨은 원리를 알아보세요.':'궁궐을 탐험하고 글자 가까이에서 띄어쓰기 키를 누르세요.'}</p><div class="inventory">${glyphs.map(c=>`<span class="${this.run.collected.includes(c)?'found':''}">${c}</span>`).join('')}<b>${count} / 5</b></div>${chapterGuide(p)}${restorationBook(this.completedChapters())}${count===5?this.button('next-stage','집현전으로 들어가기 →','primary'):''}</div><div class="minimap" aria-label="글자 위치 지도"><span>궁궐 지도</span>${PICKUPS.map(a=>`<i class="map-letter ${this.run.collected.includes(a.char)?'taken':''}" style="left:${50+a.x*2}%;top:${50+a.z*1.8}%">${a.char}</i>`).join('')}<b id="map-player">◆</b><em>남문</em></div><div class="explore-bottom"><div class="key-guide"><kbd>↑ ← ↓ →</kbd> 이동 <kbd>띄어쓰기</kbd> 발견<br><small>화면을 드래그하면 시점을 돌릴 수 있어요.</small></div><button id="interact" class="interact" data-action="interact"><kbd>띄어쓰기</kbd><span id="near-label">글자를 찾아 가까이 가세요</span></button></div><div class="touch-controls"><div id="joystick" role="group" aria-label="이동 조이스틱"><span id="stick-knob"></span></div><button data-action="interact" class="touch-interact" aria-label="글자 발견">발견 <span>✦</span></button></div>`;
     }else if(['STAGE2','STAGE3','STAGE4','STAGE5'].includes(p))body=this.puzzle();
-    else if(p==='RESTORE')body=this.shell(`<section class="panel story restore"><span class="eyebrow">마지막 장 · 훈민정음 복원</span><div class="restored-letters">ㄱ ㄴ ㅁ ㅅ ㅇ ㆍ ㅡ ㅣ</div><div class="book restored"><span>訓<br>民<br>正<br>音</span></div><h1>스물여덟 글자,<br>다시 세상으로.</h1><p class="king-quote">“누구나 자신의 생각을 글로 표현할 수 있는<br>세상을 꿈꾸었습니다.”</p><small>세종의 뜻을 바탕으로 만든 게임 속 대사입니다.</small><p>백성이 쉽게 익혀 편히 쓰도록 만든 훈민정음.<br>처음에는 <strong>28자</strong>, 오늘날 기본 자모는 <strong>24자</strong>입니다.<br>지금 쓰지 않는 <strong>ㆍ, ㆁ, ㅿ, ㆆ</strong>도 있었어요.</p><div class="reward">복원 완료 +1,000</div>${this.button('bonus','이제, 60초 한글 도전 →','primary large')}</section>`,'center-screen');
+    else if(p==='RESTORE')body=this.shell(`<section class="panel story restore"><span class="eyebrow">마지막 장 · 훈민정음 복원</span><div class="restored-letters">ㄱ ㄴ ㅁ ㅅ ㅇ ㆍ ㅡ ㅣ</div><div class="book restored"><span>訓<br>民<br>正<br>音</span></div><h1>스물여덟 글자,<br>다시 세상으로.</h1><p class="king-quote">“누구나 자신의 생각을 글로 표현할 수 있는<br>세상을 꿈꾸었습니다.”</p><small>세종의 뜻을 바탕으로 만든 게임 속 대사입니다.</small><p>백성이 쉽게 익혀 편히 쓰도록 만든 훈민정음.<br>처음에는 <strong>28자</strong>, 오늘날 기본 자모는 <strong>24자</strong>입니다.<br>지금 쓰지 않는 <strong>ㆍ, ㆁ, ㅿ, ㆆ</strong>도 있었어요.</p><div class="reward">복원 완료 +1,000</div>${restorationBook(this.completedChapters())}${this.button('bonus','이제, 60초 한글 도전 →','primary large')}</section>`,'center-screen');
     else if(p==='BONUS_READY')body=this.shell(`<section class="panel story"><span class="eyebrow">배움을 펼치는 추가 도전</span><h1>60초 한글 도전</h1><p>정답 +100 · 오답 감점 없음<br>5연속 +100 · 10연속 +300<br>10연속마다 보너스가 반복됩니다.</p><div id="countdown" class="countdown">${this.readyUntil?Math.max(1,Math.ceil((this.readyUntil-this.now())/1000)):'60'}</div><p>맞춤법부터 훈민정음까지, 배운 것을 펼쳐 보세요.</p>${this.readyUntil?'':this.button('quiz-countdown','준비됐어요!','primary large')}</section>`,'center-screen');
     else if(p==='BONUS_QUIZ')body=this.quizScreen();
     else if(p==='RESULT')body=this.resultScreen();
-    else if(p==='CERTIFICATE')body=this.shell(`<section class="panel certificate-panel"><span class="eyebrow">당신의 도전을 기억합니다</span><h1>한글 지킴이 인증서</h1><div id="certificate-preview"><p>인증서를 그리고 있습니다…</p></div><div class="button-row">${this.button('download','인증서 그림 저장 ↓','primary')}${this.button('ranking','오늘의 순위 →')}</div><p class="subtle">다음 참가자와 기기를 공유한다면 이미지를 먼저 저장해 주세요.</p>${this.resetNote()}</section>`,'center-screen');
+    else if(p==='CERTIFICATE')body=this.shell(`<section class="panel certificate-panel"><span class="eyebrow">당신의 도전을 기억합니다</span><h1>한글 지킴이 인증서</h1><div id="certificate-preview"><p>인증서를 그리고 있습니다…</p></div><div class="button-row">${this.button('download','인증서 그림 저장 ↓','primary')}${this.button('ranking','오늘의 순위 →')}${this.button('journal','나의 훈민정음 도감')}</div><p class="subtle">다음 참가자와 기기를 공유한다면 이미지를 먼저 저장해 주세요.</p>${this.resetNote()}</section>`,'center-screen');
     else if(p==='RANKING')body=this.rankingScreen();
     this.ui.innerHTML=this.chrome()+body;
+    if(this.discovery)requestAnimationFrame(()=>this.ui.querySelector('.journey-discovery')?.scrollIntoView({block:'nearest',behavior:this.reduced?'instant':'smooth'}));
     if(p==='PLAYER_SETUP')requestAnimationFrame(()=>this.ui.querySelector<HTMLInputElement>('input')?.focus());
     if(p==='STAGE1')this.bindJoystick();if(p==='CERTIFICATE')void this.drawCertificate();if(p==='STAGE4')this.bindStroke();
   }
@@ -109,7 +116,7 @@ export class FestivalGame {
       complete=han&&this.run.solved.includes('word-글');const filled=parts.filter((_,i)=>this.run.solved.includes('syllable-'+word+'-'+i)).length;
       game=complete?'<div class="assembled-word">한글</div><p class="completion-copy">소리를 모아 적는 우리 글, 한글을 완성했습니다.</p>':`<div class="syllable-target"><small>이번에 만들 글자</small><strong>${word}</strong></div><div class="syllable-slots">${['초성','중성','종성'].map((n,i)=>`<div class="slot ${i<filled?'filled':''}" data-slot="${i}"><small>${n}</small><strong>${i<filled?parts[i]:'?'}</strong></div>`).join('')}</div><div class="letter-rack">${(han?['ㄹ','ㅏ','ㄱ','ㅡ','ㅎ']:['ㄴ','ㅡ','ㅎ','ㅏ','ㄱ']).map(c=>`<button class="glyph" data-jamo="${c}">${c}</button>`).join('')}</div><p class="subtle">${han?'한 ✓　+　글 …':'첫 번째 글자를 조립하고, 다음 글자에 도전하세요.'}</p>`;
     }
-    return `${this.hud(stage)}${this.shell(`<section class="puzzle-panel"><div class="puzzle-heading"><span class="eyebrow">제${stage+1}장 · ${stages[stage]}</span><h1>${heading}</h1><p>${desc}</p></div>${game}<p id="puzzle-feedback" role="status" aria-live="polite">${complete?'✓ 원리를 발견했습니다! 다음 문이 열렸어요.':'천천히 살펴보세요. 틀려도 점수는 줄지 않아요.'}</p>${complete?this.button('next-stage',p==='STAGE5'?'훈민정음 복원하기 →':'다음 비밀로 →','primary large'):''}</section>`,'puzzle-screen')}`;
+    return `${this.hud(stage)}${this.shell(`<section class="puzzle-panel"><div class="puzzle-heading"><span class="eyebrow">제${stage+1}장 · ${stages[stage]}</span><h1>${heading}</h1><p>${desc}</p></div>${chapterGuide(p)}${restorationBook(this.completedChapters())}${game}${this.discovery?discoveryMarkup(this.discovery.kind,this.discovery.char,this.discovery.from):''}<p id="puzzle-feedback" role="status" aria-live="polite">${complete?'✓ 원리를 발견했습니다! 다음 문이 열렸어요.':'천천히 살펴보세요. 틀려도 점수는 줄지 않아요.'}</p>${complete?this.button('next-stage',p==='STAGE5'?'훈민정음 복원하기 →':'다음 비밀로 →','primary large'):''}</section>`,'puzzle-screen')}`;
   }
   private quizScreen(){
     const q=questions[this.run.quizOrder[this.run.quizIndex%this.run.quizOrder.length]];if(!q)return '';
@@ -118,7 +125,7 @@ export class FestivalGame {
   private resetNote(){return this.settings.festivalMode?'<p class="reset-note">다음 도전자를 기다리고 있습니다 · <b id="reset-count">30</b>초 동안 조작이 없으면 처음으로</p>':'';}
   private resultScreen(){
     const s=this.run.scores,t=total(s),rank=this.ranking.list(true).findIndex(e=>e.id===this.run.id)+1;
-    return this.shell(`<section class="panel result-panel"><span class="eyebrow">훈민정음 복원 완료</span><h1>훈민정음 복원 성공!</h1><p><strong>${esc(this.run.nickname)}</strong> 님, 당신의 발견이 글자를 되살렸습니다.</p><div class="title-award"><span>✦</span> ${titleFor(t)} <span>✦</span></div><div class="total-score"><small>모은 점수</small><strong>${t.toLocaleString()}</strong></div><div class="score-breakdown">${[['탐험',s.exploration],['원리 퍼즐',s.puzzle],['훈민정음 복원',s.completion],['60초 도전',s.quiz],['콤보 보너스',s.combo],['시간 보너스',s.time]].map(([n,v])=>`<div><span>${n}</span><b>${Number(v).toLocaleString()}</b></div>`).join('')}</div><p>이 기기의 오늘 순위 <strong>${rank?rank+'위':'저장 대기'}</strong> · 최고 ${this.run.bestCombo}연속 정답</p><div class="button-row">${this.button('certificate','한글 지킴이 인증서 →','primary')}${this.button('ranking','오늘의 순위')}</div>${this.button('restart','다시 도전','text-button')}${this.resetNote()}</section>`,'center-screen');
+    return this.shell(`<section class="panel result-panel"><span class="eyebrow">훈민정음 복원 완료</span><h1>훈민정음 복원 성공!</h1><p><strong>${esc(this.run.nickname)}</strong> 님, 당신의 발견이 글자를 되살렸습니다.</p><div class="title-award"><span>✦</span> ${titleFor(t)} <span>✦</span></div><div class="total-score"><small>모은 점수</small><strong>${t.toLocaleString()}</strong></div><div class="score-breakdown">${[['탐험',s.exploration],['원리 퍼즐',s.puzzle],['훈민정음 복원',s.completion],['60초 도전',s.quiz],['콤보 보너스',s.combo],['시간 보너스',s.time]].map(([n,v])=>`<div><span>${n}</span><b>${Number(v).toLocaleString()}</b></div>`).join('')}</div><p>이 기기의 오늘 순위 <strong>${rank?rank+'위':'저장 대기'}</strong> · 최고 ${this.run.bestCombo}연속 정답</p><div class="button-row">${this.button('certificate','한글 지킴이 인증서 →','primary')}${this.button('ranking','오늘의 순위')}${this.button('journal','나의 훈민정음 도감')}</div>${this.button('restart','다시 도전','text-button')}${this.resetNote()}</section>`,'center-screen');
   }
   private rankingScreen(){
     const entries=this.ranking.list(true).slice(0,config.rankingLimit);
@@ -131,20 +138,20 @@ export class FestivalGame {
   private match(kind:'organ'|'vowel',char:string){
     if(!this.selected){this.feedback('먼저 위쪽에서 글자를 하나 골라 주세요.');return;}
     if(this.selected!==char){this.feedback(kind==='organ'?`${organs.find(o=>o.char===char)!.hint}을 떠올려 보세요.`:char==='ㆍ'?'하늘을 닮은 둥근 글자를 찾아보세요.':char==='ㅡ'?'땅처럼 평평한 글자를 찾아보세요.':'서 있는 사람처럼 곧은 글자를 찾아보세요.');return;}
-    this.award(kind+'-'+char,200);this.selected='';this.render();
+    this.award(kind+'-'+char,200);this.discovery={kind,char};this.selected='';this.render();
   }
   private placeStroke(y:number){
     if(this.run.phase!=='STAGE4')return;if(this.selected!=='stroke'){this.feedback('먼저 금빛 획 조각을 선택해 주세요.');return;}
     const i=strokes.findIndex((_,idx)=>!this.run.solved.includes('stroke-'+idx));if(i<0)return;
     if(strokes[i].y!==y){this.feedback(`목표 글자 ${strokes[i].to}의 새 획 위치를 살펴보세요.`);return;}
-    this.award('stroke-'+i,200);this.selected='';this.render();
+    this.award('stroke-'+i,200);this.discovery={kind:'stroke',char:strokes[i].to,from:strokes[i].from};this.selected='';this.render();
   }
   private jamo(char:string){
     if(this.run.phase!=='STAGE5'||this.run.solved.includes('word-글'))return;
     const han=this.run.solved.includes('word-한'),word=han?'글':'한',parts=han?['ㄱ','ㅡ','ㄹ']:['ㅎ','ㅏ','ㄴ'];
     const idx=parts.findIndex((_,i)=>!this.run.solved.includes('syllable-'+word+'-'+i));
     if(parts[idx]!==char){this.feedback(`${['첫소리(초성)','가운뎃소리(중성)','끝소리(종성)'][idx]}를 골라 주세요.`);return;}
-    this.run.solved.push('syllable-'+word+'-'+idx);this.audio.play('pickup');if(idx===2)this.award('word-'+word,500);this.render();this.persist();
+    this.run.solved.push('syllable-'+word+'-'+idx);this.audio.play('pickup');if(idx===2){this.award('word-'+word,500);this.discovery={kind:'syllable',char:word};}this.render();this.persist();
   }
   private interact(){
     if(this.run.phase!=='STAGE1'||this.paused||this.modal)return;
@@ -158,6 +165,7 @@ export class FestivalGame {
     else if(p==='STAGE3'&&['ㆍ','ㅡ','ㅣ'].every(c=>this.run.solved.includes('vowel-'+c)))this.change('STAGE4');
     else if(p==='STAGE4'&&strokes.every((_,i)=>this.run.solved.includes('stroke-'+i)))this.change('STAGE5');
     else if(p==='STAGE5'&&this.run.solved.includes('word-글')){this.run.scores.completion=1000;this.run.scores.time=Math.max(0,Math.min(500,Math.floor((720-this.run.elapsed)/12)*10));this.audio.play('result');this.change('RESTORE');}
+    if(this.run.phase!==p){this.audio.play('page');this.audio.play('door');}
   }
   private beginQuiz(){
     this.run.quizOrder=questions.map((_,i)=>i);for(let i=this.run.quizOrder.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1));[this.run.quizOrder[i],this.run.quizOrder[j]]=[this.run.quizOrder[j],this.run.quizOrder[i]];}
@@ -167,7 +175,7 @@ export class FestivalGame {
     if(this.run.phase!=='BONUS_QUIZ'||this.quizLocked||this.modal)return;if(this.now()>=this.run.quizDeadline){this.finish();return;}
     const q=questions[this.run.quizOrder[this.run.quizIndex%this.run.quizOrder.length]];
     if(i===q.answer){this.run.scores.quiz+=100;this.run.combo++;this.run.bestCombo=Math.max(this.run.bestCombo,this.run.combo);const bonus=this.run.combo%10===0?300:this.run.combo%10===5?100:0;this.run.scores.combo+=bonus;this.audio.play(bonus?'combo':'correct');this.quizFeedback=`정답! +100${bonus?' · 콤보 +'+bonus:''}　${q.explanation}`;}
-    else {this.run.combo=0;this.audio.play('wrong');this.quizFeedback='아쉬워요! '+q.explanation;}
+    else {this.run.quizMistakes??=[];if(!this.run.quizMistakes.includes(q.id))this.run.quizMistakes.push(q.id);this.run.combo=0;this.audio.play('wrong');this.quizFeedback='아쉬워요! '+q.explanation;}
     this.quizLocked=true;this.quizFeedbackUntil=this.now()+1100;this.run.quizIndex++;this.persist();this.run.quizIndex--;this.render();this.run.quizIndex++;
   }
   private finish(){
@@ -191,7 +199,7 @@ export class FestivalGame {
     this.root.addEventListener('click',e=>{
       const t=e.target as HTMLElement,b=t.closest<HTMLElement>('[data-action]');
       if(b){e.preventDefault();this.action(b.dataset.action!);return;}
-      const letter=t.closest<HTMLElement>('[data-letter]');if(letter){this.selected=letter.dataset.letter!;this.audio.play('click');this.render();return;}
+      const letter=t.closest<HTMLElement>('[data-letter]');if(letter){this.discovery=null;this.selected=letter.dataset.letter!;this.audio.play('click');this.render();return;}
       const organ=t.closest<HTMLElement>('[data-organ]');if(organ){this.match('organ',organ.dataset.organ!);return;}
       const vowel=t.closest<HTMLElement>('[data-vowel]');if(vowel){this.match('vowel',vowel.dataset.vowel!);return;}
       const target=t.closest<HTMLElement>('[data-stroke-y]');if(target){this.placeStroke(Number(target.dataset.strokeY));return;}
@@ -230,12 +238,14 @@ export class FestivalGame {
       this.paused=true;this.audio.pause(true);this.openModal(`<h2>잠시 쉬어 가세요</h2><p>탐험을 이어가거나 처음부터 다시 시작할 수 있어요.</p>${this.button('quit-confirm','탐험 그만두기','text-button')}`);
     }else if(action==='quit-confirm'){this.openModal(`<h2>탐험을 끝낼까요?</h2><p>현재 진행은 사라지고, 저장된 순위는 남습니다.</p>${this.button('quit','끝내고 처음으로')}`);}
     else if(action==='quit'){this.closeModal();this.home();}
-    else if(action==='enter-palace'){this.audio.play('portal');this.change('STAGE1');}
+    else if(action==='enter-palace'){this.audio.play('door');this.audio.play('portal');this.change('STAGE1');}
     else if(action==='interact')this.interact();else if(action==='next-stage')this.advance();
     else if(action==='bonus')this.change('BONUS_READY');else if(action==='quiz-countdown'){this.readyUntil=this.now()+3000;this.render();}
     else if(action==='certificate'){this.audio.play('certificate');this.change('CERTIFICATE');}
     else if(action==='ranking'){if(this.run.phase==='START'||this.run.phase==='ATTRACT'){this.run.phase='RANKING';this.render();}else this.change('RANKING');}
     else if(action==='download')this.download();
+    else if(action==='replay-discovery'){this.audio.play('page');this.render();}
+    else if(action==='journal'){this.audio.play('page');this.openModal(journalMarkup(this.run));}
     else if(action==='clear-today'||action==='clear-all'){this.openModal(`<h2>${action==='clear-today'?'오늘':'전체'} 순위를 지울까요?</h2><p>이 기기의 ${action==='clear-today'?'오늘':'모든'} 기록이 삭제되며 되돌릴 수 없습니다.</p>${this.button(action==='clear-today'?'confirm-today':'confirm-all','기록 삭제','danger')}`);}
     else if(action==='confirm-today'||action==='confirm-all'){try{this.ranking.clear(action==='confirm-today');this.toast('선택한 기록을 초기화했습니다.');}catch{this.toast('기록을 지우지 못했습니다. 브라우저 저장 권한을 확인해 주세요.');}this.showAdmin();}
   }
@@ -258,7 +268,7 @@ export class FestivalGame {
         if(this.run.phase==='STAGE1'){
           const x=(this.keys.has('d')||this.keys.has('arrowright')?1:0)-(this.keys.has('a')||this.keys.has('arrowleft')?1:0)+this.stick.x;
           const z=(this.keys.has('s')||this.keys.has('arrowdown')?1:0)-(this.keys.has('w')||this.keys.has('arrowup')?1:0)+this.stick.z;
-          this.world.move(x,z,dt);const near=this.world.nearest(),label=this.ui.querySelector('#near-label');if(label)label.textContent=near?`${near} 발견하기`:'글자를 찾아 가까이 가세요';
+          const oldPos=this.world.getPlayer();this.world.move(x,z,dt);const newPos=this.world.getPlayer();if(Math.hypot(newPos.x-oldPos.x,newPos.z-oldPos.z)>0.001){this.footClock+=dt;if(this.footClock>=0.36){this.footClock=0;this.audio.play('footstep');}}else this.footClock=0;const near=this.world.nearest(),label=this.ui.querySelector('#near-label');if(label)label.textContent=near?`${near} 발견하기`:'글자를 찾아 가까이 가세요';
           const pos=this.world.getPlayer(),dot=this.ui.querySelector<HTMLElement>('#map-player');if(dot){dot.style.left=`${50+pos.x*2}%`;dot.style.top=`${50+pos.z*1.8}%`;}
         }
       }

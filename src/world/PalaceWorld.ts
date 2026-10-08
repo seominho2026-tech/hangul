@@ -34,6 +34,11 @@ export class PalaceWorld {
   private frameCount = 0;
   private lastFrameAt = 0;
   private qualityReduced = false;
+  private restoration = 0;
+  private restorationShown = 0;
+  private restorationPulse = 0;
+  private restorationReducedMotion = false;
+  private restorationSurfaces: { material: THREE.MeshStandardMaterial; base: THREE.Color; restored: THREE.Color; glow: number }[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -132,6 +137,11 @@ export class PalaceWorld {
     // Subpixel decorative seams must not cast/receive unstable shadow-map stripes.
     tile.userData.castShadow = false; tile.userData.receiveShadow = false;
     const gold = this.material('#cbb477'), paper = this.material('#ded1ae'), wood = this.material('#513d30');
+    // Reuse the existing material batches: no additional lights, meshes or passes.
+    for (const [material, color, glow] of [[paper, '#ffe7b0', 0.45], [red, '#aa4c38', 0.015], [green, '#43846c', 0.025], [gold, '#eed29b', 0.06]] as const) {
+      this.restorationSurfaces.push({ material, base: material.color.clone(), restored: new THREE.Color(color), glow });
+      material.emissive.set('#ffbb62');
+    }
     const grass = this.material('#727b4e'), ochre = this.material('#d4b779');
     this.box(grass, 0, -0.35, 0, 140, 0.5, 140);
     this.box(stone, 0, -0.09, 3, 34, 0.22, 36);
@@ -227,6 +237,7 @@ export class PalaceWorld {
       }
     }
     const lantern = this.material('#ffd195'); lantern.emissive.set('#e9a54a'); lantern.emissiveIntensity = 0.4;
+    this.restorationSurfaces.push({ material: lantern, base: lantern.color.clone(), restored: new THREE.Color('#ffe7b5'), glow: 0.65 });
     for (const x of [-12, 12]) for (const z of [-7, 4, 15]) {
       this.box(stone, x, 0.3, z, 0.9, 0.6, 0.9);
       this.box(wood, x, 1.4, z, 0.18, 2.3, 0.18);
@@ -302,6 +313,14 @@ export class PalaceWorld {
     }
   }
   setCollected(chars: string[]) { this.collected = new Set(chars); this.tokens.forEach((g, char) => { g.visible = !this.collected.has(char); }); }
+  setRestoration(progress: number, reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const next = Number.isFinite(progress) ? THREE.MathUtils.clamp(progress, 0, 5) : 0;
+    this.restorationReducedMotion = reducedMotion;
+    if (next > this.restoration && !reducedMotion) this.restorationPulse = 1.25;
+    else if (next < this.restoration || reducedMotion) this.restorationPulse = 0;
+    this.restoration = next;
+    if (reducedMotion) this.restorationShown = next;
+  }
   setPlayer(x: number, z: number) { this.player.position.x = THREE.MathUtils.clamp(x, -15, 15); this.player.position.z = THREE.MathUtils.clamp(z, -8.3, 18); }
   getPlayer() { return { x: this.player.position.x, z: this.player.position.z }; }
   rotate(delta: number) { this.yaw += delta; }
@@ -324,6 +343,15 @@ export class PalaceWorld {
   }
   update(dt: number, elapsed: number) {
     this.time = elapsed; this.moving = Math.max(0, this.moving - dt);
+    this.restorationShown = THREE.MathUtils.damp(this.restorationShown, this.restoration, 3, Math.max(0, dt));
+    this.restorationPulse = Math.max(0, this.restorationPulse - Math.max(0, dt));
+    const restored = this.restorationShown / 5;
+    // One soft pulse per completed chapter, never a repeating flash.
+    const pulse = this.restorationReducedMotion ? 0 : Math.sin(Math.PI * this.restorationPulse / 1.25) * 0.12;
+    for (const surface of this.restorationSurfaces) {
+      surface.material.color.copy(surface.base).lerp(surface.restored, restored);
+      surface.material.emissiveIntensity = surface.glow * restored + pulse;
+    }
     const stride = this.moving > 0 ? Math.sin(elapsed * 13) * 0.42 : 0;
     this.arms.forEach((g, i) => { g.rotation.x = stride * (i ? -1 : 1); }); this.legs.forEach((g, i) => { g.rotation.x = stride * (i ? 1 : -1); });
     this.tokens.forEach((g, char) => { g.position.y = 1.8 + Math.sin(elapsed * 1.8 + char.charCodeAt(0)) * 0.13; g.children[0].quaternion.copy(this.camera.quaternion); });
@@ -344,7 +372,7 @@ export class PalaceWorld {
     }
     this.lastFrameAt = now; this.renderer.render(this.scene, this.camera);
   }
-  diagnostics() { return { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures, materials: this.materials.length, dpr: this.renderer.getPixelRatio(), qualityReduced: this.qualityReduced, shadowMapSize: 1024, postPasses: 0 }; }
+  diagnostics() { return { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures, materials: this.materials.length, dpr: this.renderer.getPixelRatio(), qualityReduced: this.qualityReduced, shadowMapSize: 1024, postPasses: 0, restoration: this.restoration }; }
   dispose() { this.scene.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.Points) o.geometry.dispose(); }); this.materials.forEach(m => m.dispose()); this.textures.forEach(t => t.dispose()); this.renderer.dispose(); }
 }
 
